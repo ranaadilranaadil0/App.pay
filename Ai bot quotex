@@ -1,0 +1,64 @@
+import yfinance as yf
+import pandas_ta as ta
+import time
+from plyer import notification
+
+# مارکیٹ لسٹ
+ASSETS = ["EURUSD=X", "GBPUSD=X", "AUDUSD=X", "USDJPY=X", "BTC-USD"]
+TIMEFRAME = "1m"
+
+def market_health_report():
+    print("\n--- 🧠 AI Market Position Analysis ---")
+    try:
+        test_df = yf.download("EURUSD=X", period="1d", interval="15m", progress=False)
+        atr = ta.atr(test_df['High'], test_df['Low'], test_df['Close'], length=14).iloc[-1]
+        if atr > 0.0015:
+            print("⚠️ STATUS: Market bohot volatile hai. Sambhal kar trade karein!")
+        else:
+            print("✅ STATUS: Market stable hai. Trading ke liye munasib waqt hai.")
+    except:
+        print("📡 Internet check karein.")
+
+def send_alert(asset, signal_type, score):
+    notification.notify(
+        title = f"🔥 {asset} - {score}% Confidence",
+        message = f"SIGNAL: {signal_type}\nTrend: Filtered by 200 EMA",
+        timeout = 20
+    )
+
+def run_final_bot():
+    market_health_report()
+    print("\n🚀 AI Scanner Start... Quotex khol len.")
+    last_signals = {asset: 0 for asset in ASSETS}
+
+    while True:
+        for asset in ASSETS:
+            try:
+                df = yf.download(asset, period="5d", interval=TIMEFRAME, progress=False)
+                if len(df) < 200: continue
+
+                df['RSI'] = ta.rsi(df['Close'], length=14)
+                stoch = ta.stoch(df['High'], df['Low'], df['Close'])
+                df['K'] = stoch['STOCHk_14_3_3']
+                df['EMA_200'] = ta.ema(df['Close'], length=200)
+
+                latest = df.iloc[-1]
+                price = latest['Close']
+                rsi = latest['RSI']
+                stoch_k = latest['K']
+                ema_200 = latest['EMA_200']
+
+                current_time = time.time()
+                if current_time - last_signals[asset] > 180:
+                    if rsi < 25 and stoch_k < 15 and price > ema_200:
+                        send_alert(asset, "🟢 CALL (UP)", 92)
+                        last_signals[asset] = current_time
+                    elif rsi > 75 and stoch_k > 85 and price < ema_200:
+                        send_alert(asset, "🔴 PUT (DOWN)", 92)
+                        last_signals[asset] = current_time
+            except:
+                continue
+        time.sleep(10)
+
+if __name__ == "__main__":
+    run_final_bot()
